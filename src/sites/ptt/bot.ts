@@ -51,7 +51,7 @@ class Bot extends EventEmitter {
 		this.term = new Terminal(config.terminal);
 		this._state = { ...Bot.initialState };
 		this.term.state.setMode("stringWidth", "dbcs");
-		this.currentCharset = "utf8";
+		this.currentCharset = "big5";
 
 		switch (config.protocol.toLowerCase()) {
 			case "websocket":
