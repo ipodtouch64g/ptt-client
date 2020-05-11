@@ -43,16 +43,15 @@ class Bot extends EventEmitter {
 		this.config = { ...defaultConfig, ...config };
 		this.init();
 	}
-  reconnect() {
-    this.socket.connect();
-  }
+	reconnect() {
+		this.socket.connect();
+	}
 	async init(): Promise<void> {
-    
 		const { config } = this;
 		this.term = new Terminal(config.terminal);
 		this._state = { ...Bot.initialState };
 		this.term.state.setMode("stringWidth", "dbcs");
-		this.currentCharset = "big5";
+		this.currentCharset = "utf8";
 
 		switch (config.protocol.toLowerCase()) {
 			case "websocket":
@@ -226,7 +225,7 @@ class Bot extends EventEmitter {
 			state.position = {
 				boardname: ""
 			};
-			this._state.username = username;
+			this._state.username = username.substring(0, username.length - 1);
 			this.emit("stateChange", this.state);
 		}
 		return ret;
@@ -428,23 +427,50 @@ class Bot extends EventEmitter {
 	// }
 
 	async sendComment(res): Promise<string> {
-		// console.log("sendcomment", res);
 		if (!this.state.login) {
 			return Promise.reject("not login");
 		}
 		let text = res.text;
-		// configable
-		const wordsPerLine = 26;
+		text = text.trim();
+		if (text.length === 0) return Promise.reject("empty string");
+		const lenPerLine = 52;
+		// 中文字的長度是二
+		const seperateText = str => {
+			let textParts = [];
+			let strPart = "";
+			for (var i = 0, len = 0; i < str.length; ) {
+				if (str[i] >= "\u00ff") {
+					// cannot put it in
+					if (len >= lenPerLine - 1) {
+						textParts.push(strPart);
+						strPart = "";
+						len = 0;
+					} else {
+						strPart += str[i];
+						len += 2;
+						i++;
+					}
+				} else {
+					if (len == lenPerLine) {
+						textParts.push(strPart);
+						strPart = "";
+						len = 0;
+					} else {
+						strPart += str[i];
+						len += 1;
+						i++;
+					}
+				}
+			}
+			textParts.push(strPart);
+			return textParts;
+		};
+		text = seperateText(text);
 		try {
 			// enter board first
 			await this.enterBoardByName(res.boardName);
-			for (var i = 0; i < text.length; i += wordsPerLine) {
-				let textToSend = text.substring(
-					i,
-					i + wordsPerLine > text.length
-						? text.length
-						: i + wordsPerLine
-				);
+
+			for (let t of text) {
 				// get in the article by aid
 				await this.enterArticleByAIDFromBoard(res.aid);
 				// console.log("X!");
@@ -462,12 +488,13 @@ class Bot extends EventEmitter {
 					this.line[23].str.includes(this.state.username)
 				) {
 					// console.log(`${textToSend}`);
-					await this.send(`${textToSend}${key.Enter}`);
+					await this.send(`${t}${key.Enter}`);
 					await this.send(`y${key.Enter}`);
 					// console.log("after send ", this.screen);
 				}
-      }
-      await this.enterIndex();
+			}
+
+			await this.enterIndex();
 			return Promise.resolve("comment success");
 		} catch (err) {
 			return Promise.reject(err);
