@@ -16,6 +16,7 @@ class Socket extends EventEmitter {
       throw new Error(`'WebSocket' is undefined. Do you include any websocket polyfill?`);
     } else if (WebSocket.length === 1) {
       socket = new WebSocket(this._config.url);
+      console.log('WebSocket 1',socket,this._config)
     } else {
       const options: any = {};
       if (this._config.origin) {

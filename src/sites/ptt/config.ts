@@ -3,7 +3,7 @@ import Config from '../../config';
 const config: Config = {
   name: 'PTT',
   url: 'wss://ws.ptt.cc/bbs',
-  charset: 'utf8',
+  charset: 'big5',
   origin: 'app://pcman',
   protocol: 'websocket',
   timeout: 200,
