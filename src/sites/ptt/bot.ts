@@ -99,7 +99,9 @@ class Bot extends EventEmitter {
 				this.term.write(msg);
 				this.emit("redraw", this.term.toString());
 			})
-			.on("error", err => {});
+			.on("error", err => {
+        console.error(err);
+      });
 		this.socket = socket;
 	}
 
@@ -416,7 +418,95 @@ class Bot extends EventEmitter {
 		} catch (err) {
 			return Promise.reject(err);
 		}
+  }
+  
+  // This API is STATEFUL! 
+	// send comment in article, in search mode.
+	//  res = {
+	// 		"type" : "1" or "2" or "3"
+	//  	"text" : "hello!"
+	//    "boardName" : "test",
+	//    "aid" : "aid"
+	// }
+
+	async sendCommentSearchMode(res): Promise<string> {
+		let text = res.text;
+		text = text.trim();
+		if (text.length === 0) return Promise.reject("empty string");
+		const lenPerLine = 52;
+		// 中文字的長度是二
+		const seperateText = str => {
+			let textParts = [];
+			let strPart = "";
+			for (var i = 0, len = 0; i < str.length; ) {
+				if (str[i] >= "\u00ff") {
+					// cannot put it in
+					if (len >= lenPerLine - 1) {
+						textParts.push(strPart);
+						strPart = "";
+						len = 0;
+					} else {
+						strPart += str[i];
+						len += 2;
+						i++;
+					}
+				} else {
+					if (len == lenPerLine) {
+						textParts.push(strPart);
+						strPart = "";
+						len = 0;
+					} else {
+						strPart += str[i];
+						len += 1;
+						i++;
+					}
+				}
+			}
+			textParts.push(strPart);
+			return textParts;
+		};
+		text = seperateText(text);
+		try {
+      // We assume bot is in the correct article.
+			for (let t of text) {
+				// console.log("X!");
+				await this.send("X");
+
+				// console.log("after pressing X", this.screen);
+				if (this.line[23].str.includes("您覺得這篇文章")) {
+					// console.log(`type ${res.type}`);
+					await this.send(`${res.type}`);
+				}
+				// If this is your article, you can only comment in mode 3(->).
+				// Also if you send too many in short period of time, system will force you to use mode 3.
+				if (
+					this.line[22].str.includes("使用 → 加註方式") ||
+					this.line[23].str.includes(this.state.username)
+				) {
+					// console.log(`${textToSend}`);
+					await this.send(`${t}${key.Enter}`);
+					await this.send(`y${key.Enter}`);
+					// console.log("after send ", this.screen);
+				} else {
+          // Somehow you cannot send comment. go back to search page.
+          // 八卦版有限制要等三秒
+          await this.send(`${key.ArrowLeft}`);
+        }
+			}
+			return Promise.resolve("comment success");
+		} catch (err) {
+			return Promise.reject(err);
+		}
 	}
+
+
+
+
+
+
+
+
+
 
 	// send comment in article
 	//  res = {

@@ -127,8 +127,11 @@ export class ArticleSelectQueryBuilder extends SelectQueryBuilder<Article> {
 			.join();
 	}
 
-	// Used when search article.
-	// Returns an iterator.
+	/**
+	 * *** This API is STATEFUL. ***
+	 	Used when search article.
+		Returns an iterator of article list.
+	 */
 	getIterator() {
 		let last_id;
 		const iterator = {
@@ -136,9 +139,7 @@ export class ArticleSelectQueryBuilder extends SelectQueryBuilder<Article> {
 				try {
 					// already receive all parts
 					if (last_id === 1) {
-						// return to index
 						// last part will be ignore
-						await this.bot.enterIndex();
 						return { value: null, done: true };
 					}
 
@@ -175,6 +176,41 @@ export class ArticleSelectQueryBuilder extends SelectQueryBuilder<Article> {
 			}
 		};
 		return iterator;
+	}
+
+	/**
+	 * *** This API is STATEFUL. ***
+	 *  We use this API when clicking an article item of search article list.
+		Returns an article.
+	 */
+	async getOneInSearch(): Promise<Article | undefined> {
+		//  This is NOT global id.
+		//  It is generated locally when search.
+		await this.bot.send(`${this.id}${key.Enter}${key.Enter}`);
+
+		const article = new Article();
+		article.id = this.id;
+		article.boardname = this.boardname;
+		article.content = await this.bot.getContent();
+
+		if (article.hasHeader()) {
+			article.author = substrWidth(
+				"dbcs",
+				this.bot.line[0].str,
+				7,
+				50
+			).trim();
+			article.title = substrWidth("dbcs", this.bot.line[1].str, 7).trim();
+			article.timestamp = substrWidth(
+				"dbcs",
+				this.bot.line[2].str,
+				7
+			).trim();
+		}
+
+		// go back to search
+		await this.bot.send(`${key.ArrowLeft}`);
+		return article;
 	}
 
 	// Used when click in boarditem, we will only specify boardname.
