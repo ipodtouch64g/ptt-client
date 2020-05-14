@@ -200,13 +200,14 @@ export class BoardSelectQueryBuilder extends SelectQueryBuilder<Board> {
           col += 1;
           row = 0;
           /* TODO: Use other way instead of the constant 80. */
+          // Optimization : only get 1 page.
           if ((col + 1) * width > 80) {
-            if (this.bot.line[23].str.includes('按任意鍵繼續')) {
-              col = row = 0;
-              await this.bot.send(' ');
-            } else {
+            // if (this.bot.line[23].str.includes('按任意鍵繼續')) {
+            //   col = row = 0;
+            //   await this.bot.send(' ');
+            // } else {
               break;
-            }
+            // }
           }
         }
       }

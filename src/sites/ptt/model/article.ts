@@ -127,6 +127,57 @@ export class ArticleSelectQueryBuilder extends SelectQueryBuilder<Article> {
 			.join();
 	}
 
+	// Used when search article.
+	// Returns an iterator.
+	getIterator() {
+		let last_id;
+		const iterator = {
+			next: async () => {
+				try {
+					// already receive all parts
+					if (last_id === 1) {
+						// return to index
+						// last part will be ignore
+						await this.bot.enterIndex();
+						return { value: null, done: true };
+					}
+
+					// first time init
+					if (!last_id) {
+						await this.bot.enterBoardByName(this.boardname);
+						const found = await this.bot.send(this.getQuery());
+						console.log("found", found);
+						if (!found) return { value: null, done: true };
+						// go to bottom to prevent repeatitive search bug
+						await this.bot.send(`${key.End}`);
+					} else {
+						await this.bot.send(`${key.PgUp}`);
+					}
+
+					let articles: Article[] = [];
+					for (let i = 3; i <= 22; i++) {
+						const line = this.bot.line[i];
+						// console.log("line", line);
+						if (line.str.trim() === "") {
+							break;
+						}
+						const article = Article.fromLine(line);
+						article.boardname = this.boardname;
+						articles.push(article);
+					}
+					// console.log("articles", articles);
+
+					last_id = articles[0].id;
+					return { value: articles, done: false };
+				} catch (err) {
+					return Promise.reject(err);
+				}
+			}
+		};
+		return iterator;
+	}
+
+	// Used when click in boarditem, we will only specify boardname.
 	async get(): Promise<Article[]> {
 		await this.bot.enterBoardByName(this.boardname);
 		const found = await this.bot.send(this.getQuery());
