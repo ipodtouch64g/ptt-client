@@ -10,6 +10,7 @@ import { getWidth, indexOfWidth, substrWidth } from "../../utils/char";
 
 import defaultConfig from "./config";
 import { Article, Board } from "./model";
+import { bot } from ".";
 
 class Bot extends EventEmitter {
 	static initialState = {
@@ -100,8 +101,8 @@ class Bot extends EventEmitter {
 				this.emit("redraw", this.term.toString());
 			})
 			.on("error", err => {
-        console.error(err);
-      });
+				console.error(err);
+			});
 		this.socket = socket;
 	}
 
@@ -113,32 +114,125 @@ class Bot extends EventEmitter {
 		return this.term.state.getLine(n);
 	};
 
+	// This will return iterator of content.
+	getContentIterator() {
+		let infoLine = this.line[23].str;
+
+		let pgTotal = Number(
+			infoLine
+				.substring(
+					infoLine.indexOf("第") + 2,
+					infoLine.indexOf("頁") - 1
+				)
+				.split("/")[1]
+		);
+		console.log("pgtotal", pgTotal);
+    let allRead = false;
+    let firstPage = true;
+    let index = 0;
+
+    let lines = [];
+    lines.push(this.line[0]);
+
+		const iterator = {
+			reset: () => {
+				index = 0;
+        allRead = false;
+        firstPage = true;
+      },
+			next: async () => {
+				try {
+					// debugger;
+					// already read all parts
+					if (allRead || infoLine.includes("此文章無內容")) {
+						// last part will be ignore
+						return { value: null, done: true };
+					}
+
+					
+					// read numOfPagesPerIteration pages
+
+					for (
+						var ni = 0;
+						ni < this.config.numOfPagesPerIteration && !allRead;
+						ni++
+					) {
+						infoLine = this.line[23].str;
+						let pgNow = Number(
+							infoLine
+								.substring(
+									infoLine.indexOf("第") + 2,
+									infoLine.indexOf("頁") - 1
+								)
+								.split("/")[0]
+						);
+
+						console.log("pgNow", pgNow);
+						let l;
+						console.log("infoline", infoLine);
+						l = infoLine
+							.substring(
+								infoLine.lastIndexOf("第") + 2,
+								infoLine.indexOf("行") - 1
+							)
+							.split("~")
+							.map(Number);
+            console.log("l", l);
+            let i = firstPage ? l[0] : l[0]+1;
+						for (var j = 1; j <= 22; i++, j++) {
+							const line = this.line[j];
+							if (i > index) {
+								lines.push(line);
+								index++;
+								console.log("line ", i, ", index ",index," ", line);
+							}
+            }
+            firstPage = false;
+						// last page
+						if (pgNow === pgTotal) {
+							allRead = true;
+						} else {
+							await this.send(`${key.PgDown}`);
+						}
+					}
+					// remove all empty lines at the end
+					if (allRead) {
+						while (
+							lines.length > 0 &&
+							lines[lines.length - 1].str === ""
+						) {
+							index--;
+							lines.pop();
+            }
+           
+					}
+          let r = { value: lines, done: false };
+          lines = [];
+          return r;
+				} catch (err) {
+					return Promise.reject(err);
+				}
+			}
+		};
+		return iterator;
+	}
+
+	// This will return whole object.
 	async getContent(): Promise<Line[]> {
 		const lines = [];
-		// console.log(this.line);
 		lines.push(this.line[0]);
 
 		let sentPgDown = false;
-		// var t0 = performance.now()
 		while (
 			!this.line[23].str.includes("100%") &&
 			!this.line[23].str.includes("此文章無內容")
 		) {
-			// var t2 = performance.now()
 			for (let i = 1; i < 23; i++) {
 				lines.push(this.line[i]);
 			}
-			// var t3 = performance.now()
-			// console.log('lines.push : ', t3-t2 + 'ms')
-			// t3 = performance.now()
 			await this.send(key.PgDown);
-			// var t4 = performance.now()
-			// console.log('await send key pgdown : ', t4-t3 + 'ms')
-			// console.log(this.line);
 			sentPgDown = true;
 		}
-		// var t1 = performance.now()
-		// console.log('while loop : ', t1-t0 + 'ms')
 		const lastLine = lines[lines.length - 1];
 
 		for (let i = 0; i < 23; i++) {
@@ -380,6 +474,11 @@ class Bot extends EventEmitter {
 		return true;
 	}
 
+	async goToTop(): Promise<boolean> {
+		await this.send(`${key.Home}`);
+		return true;
+	}
+
 	get currentBoardname(): string | undefined {
 		const boardRe = /【(?!看板列表).*】.*《(?<boardname>.*)》/;
 		const match = boardRe.exec(this.line[0].str);
@@ -418,9 +517,9 @@ class Bot extends EventEmitter {
 		} catch (err) {
 			return Promise.reject(err);
 		}
-  }
-  
-  // This API is STATEFUL! 
+	}
+
+	// This API is STATEFUL!
 	// send comment in article, in search mode.
 	//  res = {
 	// 		"type" : "1" or "2" or "3"
@@ -467,7 +566,7 @@ class Bot extends EventEmitter {
 		};
 		text = seperateText(text);
 		try {
-      // We assume bot is in the correct article.
+			// We assume bot is in the correct article.
 			for (let t of text) {
 				// console.log("X!");
 				await this.send("X");
@@ -488,10 +587,10 @@ class Bot extends EventEmitter {
 					await this.send(`y${key.Enter}`);
 					// console.log("after send ", this.screen);
 				} else {
-          // Somehow you cannot send comment. go back to search page.
-          // 八卦版有限制要等三秒
-          await this.send(`${key.ArrowLeft}`);
-        }
+					// Somehow you cannot send comment. go back to search page.
+					// 八卦版有限制要等三秒
+					await this.send(`${key.ArrowLeft}`);
+				}
 			}
 			return Promise.resolve("comment success");
 		} catch (err) {
@@ -499,14 +598,7 @@ class Bot extends EventEmitter {
 		}
 	}
 
-
-
-
-
-
-
-
-
+	async enterArticle() {}
 
 	// send comment in article
 	//  res = {
@@ -562,7 +654,7 @@ class Bot extends EventEmitter {
 
 			for (let t of text) {
 				// get in the article by aid
-				await this.enterArticleByAIDFromBoard(res.aid);
+				await this.enterArticle();
 				// console.log("X!");
 				await this.send("X");
 

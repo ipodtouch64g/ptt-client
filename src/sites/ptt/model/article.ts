@@ -14,6 +14,8 @@ export class Article {
 	status: string;
 	title: string;
 	fixed: boolean;
+	iterator: { next: () => Promise<{ value: []; done: boolean }> };
+	sendComment: (arg0: any,arg1: any) => Promise<string>;
 	private _content: Line[] = [];
 
 	get content(): ReadonlyArray<Line> {
@@ -283,6 +285,110 @@ export class ArticleSelectQueryBuilder extends SelectQueryBuilder<Article> {
 
 		await this.bot.enterIndex();
 		return article;
+	}
+
+	async getOneIterator() {
+		await this.bot.enterBoardByName(this.boardname);
+		const found = await this.bot.send(this.getQuery());
+		if (!found) {
+			return void 0;
+		}
+		try {
+			// /* TODO: validate id */
+			await this.bot.send(`${this.id}${key.Enter}${key.Enter}`);
+			const article = new Article();
+			article.id = this.id;
+			article.boardname = this.boardname;
+			article.iterator = await this.bot.getContentIterator();
+			article.sendComment = this.sendComment;
+			return article;
+		} catch (err) {
+			return Promise.reject(err);
+		}
+	}
+	// assume that we are in an article now.
+	// send comment in article
+	//  arg = {
+	// 		"type" : "1" or "2" or "3"
+	//  	"text" : "hello!"
+	//    "boardName" : "test",
+	//    "aid" : "aid"
+	// }
+	async sendComment(arg,bot): Promise<string> {
+		
+		if (!bot.state.login) {
+			return Promise.reject("not login");
+		}
+		let text = arg.text;
+		text = text.trim();
+		if (text.length === 0) return Promise.reject("empty string");
+		const lenPerLine = 52;
+		// 中文字的長度是二
+		const seperateText = str => {
+			let textParts = [];
+			let strPart = "";
+			for (var i = 0, len = 0; i < str.length; ) {
+				if (str[i] >= "\u00ff") {
+					// cannot put it in
+					if (len >= lenPerLine - 1) {
+						textParts.push(strPart);
+						strPart = "";
+						len = 0;
+					} else {
+						strPart += str[i];
+						len += 2;
+						i++;
+					}
+				} else {
+					if (len == lenPerLine) {
+						textParts.push(strPart);
+						strPart = "";
+						len = 0;
+					} else {
+						strPart += str[i];
+						len += 1;
+						i++;
+					}
+				}
+			}
+			textParts.push(strPart);
+			return textParts;
+		};
+		text = seperateText(text);
+		try {
+			for (let t of text) {
+				// console.log("X!");
+				await bot.send("X");
+
+				console.log("after pressing X", bot.screen);
+				if (bot.line[23].str.includes("您覺得這篇文章")) {
+					// console.log(`type ${res.type}`);
+					await bot.send(`${arg.type}`);
+				}
+				// If this is your article, you can only comment in mode 3(->).
+				// Also if you send too many in short period of time, system will force you to use mode 3.
+				if (
+					bot.line[22].str.includes("使用 → 加註方式") ||
+					bot.line[23].str.includes(bot.state.username)
+				) {
+					// console.log(`${textToSend}`);
+					await bot.send(`${t}${key.Enter}`);
+					await bot.send(`y${key.Enter}`);
+					console.log("after send ", bot.screen);
+				} else {
+					// not success
+					return Promise.reject("comment failed");
+				}
+				// here, after sent comment, bot will be outside of article
+				// thus we need to go back to article again.
+				await bot.send(`${key.Enter}`);
+				console.log("after enter ", bot.screen);
+			}
+
+			return Promise.resolve("comment success");
+		} catch (err) {
+			return Promise.reject(err);
+		}
 	}
 }
 

@@ -13,6 +13,7 @@ const config: Config = {
     columns: 80,
     rows: 24,
   },
+  numOfPagesPerIteration: 2,
 };
 
 export default config;
